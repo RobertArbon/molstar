@@ -37,7 +37,7 @@ The core modules under `src/` include:
 - **mol-data**: Collections (integer-based sets, tables, columns interface)
 - **mol-math**: Mathematical algorithms and data structures
 - **mol-io**: Format parsers for coordinate, experimental, and annotation data
-- **mol-model**: Molecular data structures and querying algorithms
+- **mol-model**: Molecular data structures and querying algorithms *(see [mol-model/CLAUDE.md](src/mol-model/CLAUDE.md))*
 - **mol-model-formats**: Data format parsers for mol-model
 - **mol-model-props**: Common custom properties
 - **mol-script**: Scripting language including MolQL query language
@@ -47,9 +47,9 @@ The core modules under `src/` include:
 - **mol-gl**: WebGL wrapper
 - **mol-canvas3d**: Low-level 3D view component
 - **mol-state**: State representation tree with auto-updates
-- **mol-plugin**: Modular plugin instances
-- **mol-plugin-state**: State transformations and builders
-- **mol-plugin-ui**: React-based user interface
+- **mol-plugin**: Modular plugin instances *(see [mol-plugin/CLAUDE.md](src/mol-plugin/CLAUDE.md))*
+- **mol-plugin-state**: State transformations and builders *(see [mol-plugin-state/CLAUDE.md](src/mol-plugin-state/CLAUDE.md))*
+- **mol-plugin-ui**: React-based user interface *(see [mol-plugin-ui/CLAUDE.md](src/mol-plugin-ui/CLAUDE.md))*
 - **mol-util**: Utility functions
 
 **Apps Structure:**
@@ -140,3 +140,18 @@ The viewer includes extensions for backgrounds, quality assessment, structure an
 4. Hot reloading supported in development mode
 
 This architecture provides a robust foundation for molecular visualization applications with excellent performance, extensibility, and modern web standards compliance.
+
+## Module Documentation
+
+For detailed information about specific Mol* modules, see the individual CLAUDE.md files:
+
+- **[mol-model](src/mol-model/CLAUDE.md)**: Core molecular data structures, query system, and algorithms
+- **[mol-plugin](src/mol-plugin/CLAUDE.md)**: Core plugin architecture, context management, and runtime orchestration  
+- **[mol-plugin-state](src/mol-plugin-state/CLAUDE.md)**: State management, transformations, and data processing pipeline
+- **[mol-plugin-ui](src/mol-plugin-ui/CLAUDE.md)**: React-based user interface components and layout system
+
+These modules work together to provide the complete Mol* molecular visualization platform:
+- **mol-model** provides the fundamental data structures
+- **mol-plugin-state** manages transformations and state trees of molecular data
+- **mol-plugin** orchestrates everything and provides the runtime system
+- **mol-plugin-ui** provides the React interface for user interaction
