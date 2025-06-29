@@ -32,7 +32,10 @@ nav:
   - Plugin:
     - Creating Instance: 'plugin/instance.md'
     - Examples: plugin/examples.md
-    - Custom Library: 'plugin/custom-library.md'
+    - Custom Library:
+      - Overview: 'plugin/custom-library/index.md'
+      - API Reference: 'plugin/custom-library/api-reference.md'
+      - Examples: 'plugin/custom-library/examples.md'
     - Selections: 'plugin/selections.md'
     - Viewer State: 'plugin/viewer-state.md'
     - Data State: 'plugin/data-state.md'
