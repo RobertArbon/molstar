@@ -69,7 +69,52 @@ export type PluginInitializedState =
     | { kind: 'yes' }
     | { kind: 'error', error: any }
 
+/**
+ * Core context class that provides the foundational functionality for Mol* plugin instances.
+ * 
+ * The PluginContext serves as the central hub for all plugin operations, managing state,
+ * rendering, interactions, and data processing. It provides a comprehensive API for custom
+ * library developers to build molecular visualization applications.
+ * 
+ * @example
+ * ```typescript
+ * import { PluginContext } from 'molstar/lib/mol-plugin/context';
+ * import { DefaultPluginSpec } from 'molstar/lib/mol-plugin/spec';
+ * 
+ * const ctx = new PluginContext(DefaultPluginSpec());
+ * await ctx.init();
+ * 
+ * // Mount to DOM element
+ * const target = document.getElementById('molstar-container');
+ * ctx.mount(target);
+ * 
+ * // Load structure data
+ * const data = await ctx.builders.data.download({ url: 'path/to/structure.pdb' });
+ * const trajectory = await ctx.builders.structure.parseTrajectory(data, 'pdb');
+ * const model = await ctx.builders.structure.createModel(trajectory);
+ * const structure = await ctx.builders.structure.createStructure(model);
+ * ```
+ * 
+ * @public
+ */
 export class PluginContext {
+    /**
+     * Executes a task with optional overlay display for long-running operations.
+     * 
+     * This is the primary method for running asynchronous tasks in the plugin context.
+     * Tasks are used for data loading, structure processing, and other operations that
+     * may take significant time.
+     * 
+     * @param task - The task to execute
+     * @param params - Optional parameters
+     * @param params.useOverlay - Whether to show a loading overlay during task execution
+     * @returns Promise that resolves with the task result
+     * 
+     * @example
+     * ```typescript
+     * const result = await ctx.runTask(downloadTask, { useOverlay: true });
+     * ```
+     */
     runTask = <T>(task: Task<T>, params?: { useOverlay?: boolean }) => this.managers.task.run(task, params);
     resolveTask = <T>(object: Task<T> | T | undefined) => {
         if (!object) return void 0;
@@ -86,8 +131,13 @@ export class PluginContext {
     private canvasContainer: HTMLDivElement | undefined = void 0;
     private ev = RxEventHelper.create();
 
+    /** Configuration manager for plugin settings and options */
     readonly config = new PluginConfigManager(this.spec.config); // needed to init state
+    
+    /** State management system for data structures and plugin state */
     readonly state = new PluginState(this);
+    
+    /** Command system for executing plugin actions and operations */
     readonly commands = new PluginCommandManager();
 
     private canvas3dInit = this.ev.behavior<boolean>(false);
@@ -156,6 +206,26 @@ export class PluginContext {
 
     readonly dataFormats = new DataFormatRegistry();
 
+    /**
+     * Builder objects for constructing data structures and molecular representations.
+     * 
+     * Provides high-level APIs for loading and processing molecular data:
+     * - `data`: Builder for loading raw data (files, URLs, etc.)
+     * - `structure`: Builder for creating molecular structures, models, and representations
+     * 
+     * @example
+     * ```typescript
+     * // Load structure from URL
+     * const data = await ctx.builders.data.download({ url: 'structure.pdb' });
+     * const trajectory = await ctx.builders.structure.parseTrajectory(data, 'pdb');
+     * const model = await ctx.builders.structure.createModel(trajectory);
+     * const structure = await ctx.builders.structure.createStructure(model);
+     * const representation = await ctx.builders.structure.representation.addRepresentation(structure, {
+     *   type: 'cartoon',
+     *   color: 'chain-id'
+     * });
+     * ```
+     */
     readonly builders = {
         data: new DataBuilder(this),
         structure: void 0 as any as StructureBuilder
@@ -170,6 +240,32 @@ export class PluginContext {
         viewportScreenshot: void 0 as ViewportScreenshotHelper | undefined
     } as const;
 
+    /**
+     * Manager objects that handle specific aspects of plugin functionality.
+     * 
+     * Each manager provides specialized functionality:
+     * - `structure`: Manages molecular structures, selections, measurements, and focus
+     * - `volume`: Manages volumetric data (electron density maps, etc.)
+     * - `interactivity`: Handles user interactions (hover, click, drag)
+     * - `camera`: Controls viewport camera positioning and animation
+     * - `animation`: Manages structure and camera animations
+     * - `snapshot`: Handles state snapshots for undo/redo functionality
+     * - `lociLabels`: Manages labels and annotations
+     * - `toast`: Displays notification messages
+     * - `asset`: Manages external assets and resources
+     * - `task`: Coordinates asynchronous task execution
+     * - `dragAndDrop`: Handles drag-and-drop file operations
+     * 
+     * @example
+     * ```typescript
+     * // Select residues and focus camera
+     * const selection = ctx.managers.structure.selection.fromSelectionQuery(query);
+     * ctx.managers.camera.focusLoci(selection.loci);
+     * 
+     * // Create measurement
+     * ctx.managers.structure.measurement.addDistance(loci1, loci2);
+     * ```
+     */
     readonly managers = {
         structure: {
             hierarchy: new StructureHierarchyManager(this),
@@ -258,8 +354,38 @@ export class PluginContext {
     }
 
     /**
-     * Mount the plugin into the target element (assumes the target has "relative"-like positioninig).
-     * If initContainer wasn't called separately before, initOptions will be passed to it.
+     * Mounts the plugin into a target DOM element for display.
+     * 
+     * The target element should have "relative" or similar positioning to properly contain
+     * the plugin's canvas and UI elements. This method handles the complete setup of the
+     * 3D rendering context and viewport.
+     * 
+     * @param target - The DOM element to mount the plugin into
+     * @param initOptions - Optional initialization parameters
+     * @param initOptions.canvas3dContext - Pre-existing Canvas3D context to reuse
+     * @param initOptions.checkeredCanvasBackground - Whether to show checkered background pattern
+     * @returns `true` if mounting succeeded, `false` otherwise
+     * 
+     * @example
+     * ```typescript
+     * const container = document.getElementById('molstar-container');
+     * container.style.position = 'relative';
+     * container.style.width = '800px';
+     * container.style.height = '600px';
+     * 
+     * const success = ctx.mount(container, {
+     *   checkeredCanvasBackground: true
+     * });
+     * 
+     * if (success) {
+     *   console.log('Plugin mounted successfully');
+     * }
+     * ```
+     * 
+     * @remarks
+     * - Automatically calls `initContainer()` if not previously called
+     * - Triggers canvas resize to fit the target element
+     * - Target element must have explicit dimensions set via CSS
      */
     mount(target: HTMLElement, initOptions?: { canvas3dContext?: Canvas3DContext, checkeredCanvasBackground?: boolean }) {
         if (this.disposed) throw new Error('Cannot mount a disposed context');
@@ -279,6 +405,36 @@ export class PluginContext {
         this.canvasContainer?.parentElement?.removeChild(this.canvasContainer);
     }
 
+    /**
+     * Initializes the 3D viewer with canvas and WebGL context setup.
+     * 
+     * This method sets up the core 3D rendering infrastructure, including WebGL context
+     * creation, canvas configuration, and interaction handlers. It's typically called
+     * internally by `mount()` but can be used directly for custom setups.
+     * 
+     * @param canvas - HTML canvas element for 3D rendering
+     * @param container - Container div element that holds the canvas
+     * @param canvas3dContext - Optional pre-existing Canvas3D context
+     * @returns `true` if initialization succeeded, `false` if WebGL setup failed
+     * 
+     * @example
+     * ```typescript
+     * const canvas = document.createElement('canvas');
+     * const container = document.createElement('div');
+     * container.appendChild(canvas);
+     * 
+     * const success = ctx.initViewer(canvas, container);
+     * if (!success) {
+     *   console.error('WebGL initialization failed');
+     * }
+     * ```
+     * 
+     * @remarks
+     * - Configures WebGL context with appropriate settings for molecular visualization
+     * - Sets up interaction event handlers (mouse, keyboard, touch)
+     * - Initializes camera and rendering pipeline
+     * - Automatically detects and handles WebGL version capabilities
+     */
     initViewer(canvas: HTMLCanvasElement, container: HTMLDivElement, canvas3dContext?: Canvas3DContext) {
         try {
             this.layout.setRoot(container);
@@ -381,6 +537,29 @@ export class PluginContext {
         return this.runTask(this.state.data.transaction(f, options));
     }
 
+    /**
+     * Clears all loaded data and structures from the plugin.
+     * 
+     * This method removes all molecular structures, volumes, and representations
+     * from the scene while preserving the plugin context and configuration.
+     * 
+     * @param resetViewportSettings - Whether to reset camera and viewport settings to defaults
+     * @returns Promise that resolves when clearing is complete
+     * 
+     * @example
+     * ```typescript
+     * // Clear all data but keep current camera position
+     * await ctx.clear();
+     * 
+     * // Clear all data and reset viewport to default position
+     * await ctx.clear(true);
+     * ```
+     * 
+     * @remarks
+     * - Does not dispose the plugin context itself
+     * - Useful for loading new data without recreating the entire plugin
+     * - Triggers state cleanup and memory garbage collection
+     */
     clear(resetViewportSettings = false) {
         if (resetViewportSettings) this.canvas3d?.setProps(DefaultCanvas3DParams);
         return PluginCommands.State.RemoveObject(this, { state: this.state.data, ref: StateTransform.RootRef });
@@ -511,6 +690,41 @@ export class PluginContext {
         }
     }
 
+    /**
+     * Initializes the plugin context and all its subsystems.
+     * 
+     * This method performs the complete initialization sequence:
+     * - Sets up behavior systems and event handlers
+     * - Initializes managers for structures, interactions, and animations
+     * - Loads custom formats and data actions
+     * - Registers default behaviors and capabilities
+     * 
+     * Must be called before the plugin can be used for any operations.
+     * 
+     * @returns Promise that resolves when initialization is complete
+     * 
+     * @example
+     * ```typescript
+     * const ctx = new PluginContext(DefaultPluginSpec());
+     * 
+     * try {
+     *   await ctx.init();
+     *   console.log('Plugin initialized successfully');
+     *   
+     *   // Now safe to mount and use the plugin
+     *   ctx.mount(targetElement);
+     * } catch (error) {
+     *   console.error('Plugin initialization failed:', error);
+     * }
+     * ```
+     * 
+     * @throws Will throw an error if initialization fails
+     * 
+     * @remarks
+     * - This is an async operation that may take several seconds
+     * - Should only be called once per context instance
+     * - Sets up all plugin behaviors and capabilities defined in the spec
+     */
     async init() {
         try {
             this.subs.push(this.events.log.subscribe(e => this.log.entries = this.log.entries.push(e)));
@@ -540,6 +754,22 @@ export class PluginContext {
         }
     }
 
+    /**
+     * Creates a new PluginContext instance.
+     * 
+     * @param spec - Plugin specification defining behaviors, actions, and configuration
+     * 
+     * @example
+     * ```typescript
+     * import { DefaultPluginSpec } from 'molstar/lib/mol-plugin/spec';
+     * 
+     * const ctx = new PluginContext(DefaultPluginSpec());
+     * ```
+     * 
+     * @remarks
+     * - Does not initialize the plugin - call `init()` before use
+     * - The spec defines what capabilities and behaviors the plugin will have
+     */
     constructor(public spec: PluginSpec) {
         // the reason for this is that sometimes, transform params get modified inline (i.e. palette.valueLabel)
         // and freezing the params object causes "read-only exception"
