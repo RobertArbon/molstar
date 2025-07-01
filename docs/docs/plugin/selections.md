@@ -51,16 +51,213 @@ plugin.behaviors.interaction.click.subscribe(
 
 ### `Molscript` language
 
-Molscript is a language for addressing crystallographic structures and is a part of the Mol* library found at `https://github.com/molstar/molstar/tree/master/src/mol-script`. It can be used against the Molstar plugin as a query language and transpiled against multiple external molecular visualization libraries(see [here](https://github.com/molstar/molstar/tree/master/src/mol-script/transpilers)).
+Molscript is a domain-specific language for addressing crystallographic structures and is a core part of the Mol* library found at `https://github.com/molstar/molstar/tree/master/src/mol-script`. It can be used against the Molstar plugin as a query language and transpiled against multiple external molecular visualization libraries (see [here](https://github.com/molstar/molstar/tree/master/src/mol-script/transpilers)).
 
-### Querying a structure for a specific chain and residue range (select residues with 12<res_id<200 of chain with auth_asym_id==A) :
+The MolScript language provides both simple string-based selections via `compileIdListSelection()` and complex programmatic queries via the `MolScriptBuilder`. This section covers comprehensive examples of both approaches.
+
+#### Simple String-Based Selections
+
+The `compileIdListSelection()` function provides a convenient way to create selections using simple string syntax:
 
 ```typescript
 import { compileIdListSelection } from 'molstar/lib/mol-script/util/id-list'
 
-const query = compileIdListSelection('A 12-200', 'auth');
-window.molstar?.managers.structure.selection.fromCompiledQuery('add',query);
+// Basic chain and residue range selection
+const query1 = compileIdListSelection('A 12-200', 'auth');
+plugin.managers.structure.selection.fromCompiledQuery('add', query1);
+
+// Multiple chains
+const query2 = compileIdListSelection('A,B,C', 'auth');
+plugin.managers.structure.selection.fromCompiledQuery('set', query2);
+
+// Specific residues in multiple chains
+const query3 = compileIdListSelection('A 10,15,20-25 B 5-10', 'auth');
+plugin.managers.structure.selection.fromCompiledQuery('set', query3);
+
+// Using label identifiers instead of author
+const query4 = compileIdListSelection('A 100-150', 'label');
+plugin.managers.structure.selection.fromCompiledQuery('set', query4);
 ```
+
+#### Comprehensive Selection String Syntax
+
+Mol* supports multiple selection string formats and languages, providing both simple ID-based selections and advanced query capabilities comparable to desktop molecular visualization software.
+
+##### 1. ID List Selections (`compileIdListSelection`)
+
+The `compileIdListSelection(selectionString, idType)` function supports four different ID types:
+
+###### **Residue-Based Selections (`'auth'` and `'label'` modes)**
+
+| Selection String | Description |
+|------------------|-------------|
+| **Basic Chain Selections** |
+| `'A'` | All residues in chain A |
+| `'A,B,C'` | All residues in chains A, B, and C |
+| **Residue Range Selections** |
+| `'A 100-150'` | Chain A residues 100 to 150 (inclusive) |
+| `'A 10-20 B 30-40'` | Chain A residues 10-20 and chain B residues 30-40 |
+| `'A,B 10-50'` | Residues 10-50 in both chains A and B |
+| **Specific Residue Selections** |
+| `'A 42'` | Chain A residue 42 only |
+| `'A 10,20,30'` | Chain A residues 10, 20, and 30 |
+| `'A 5,10-15,25'` | Chain A residues 5, 10-15 (range), and 25 |
+| **Insertion Codes** |
+| `'A 100:A'` | Chain A residue 100 with insertion code A |
+| `'A 100:i,101:A'` | Chain A residues with specific insertion codes |
+| `'A 100:A-100:Z'` | Range of residues with insertion codes |
+| **Negative Residue Numbers** |
+| `'A -10--1'` | Chain A residues -10 to -1 (negative numbering) |
+| `'A -5,1-10'` | Chain A residue -5 and residues 1-10 |
+| **Complex Multi-Chain Selections** |
+| `'A 1-50,75-100,150 B 25-75 C 200-250'` | Mixed ranges and specific residues across chains |
+
+###### **Atom ID Selections (`'atom-id'` mode)**
+
+| Selection String | Description |
+|------------------|-------------|
+| `'1,5,10'` | Atoms with IDs 1, 5, and 10 |
+| `'1-10'` | Atoms with IDs 1 through 10 |
+| `'1-10,15-20'` | Atoms 1-10 and 15-20 |
+| `'1,5-10,15'` | Mixed specific IDs and ranges |
+
+###### **Element Selections (`'element-symbol'` mode)**
+
+| Selection String | Description |
+|------------------|-------------|
+| `'C,N,O'` | Carbon, nitrogen, and oxygen atoms |
+| `'C'` | All carbon atoms |
+| `'6,7,8'` | Elements by atomic number (C, N, O) |
+| `'6-8'` | Elements with atomic numbers 6-8 |
+
+##### 2. External Language Support
+
+Mol* includes transpilers for popular molecular visualization languages:
+
+###### **PyMOL Syntax Support**
+
+Mol* supports PyMOL selection syntax through `compileIdListSelection(selectionString, 'pymol')`:
+
+| PyMOL Selection | Description |
+|------------------|-------------|
+| **Basic Patterns** |
+| `'chain A'` | All atoms in chain A |
+| `'resi 10-20'` | Residues 10 through 20 |
+| `'name CA'` | All CA atoms |
+| `'element C'` | All carbon atoms |
+| **Range Extensions** |
+| `'resi 10-20+25+30-35'` | Residues 10-20, plus 25, plus 30-35 |
+| `'element O+N+C'` | Oxygen, nitrogen, and carbon atoms |
+| **Logical Operators** |
+| `'chain A and resi 10-20'` | Chain A residues 10-20 |
+| `'name CA or name CB'` | CA or CB atoms |
+| `'not chain A'` | Everything except chain A |
+| **Secondary Structure** |
+| `'ss H'` | Helical regions |
+| `'ss S'` | Beta strand regions |
+| `'ss L'` | Loop regions |
+| `'ss H+S'` | Helices and strands |
+| **Slash Notation** |
+| `'/object/segi/chain/resi/name'` | PyMOL object hierarchy selection |
+| **Distance Selections** |
+| `'around 5.0 and chain A'` | Atoms within 5Å of chain A |
+| `'neighbor chain A'` | Atoms bonded to chain A |
+
+###### **VMD Syntax Support**
+
+VMD selection language through `compileIdListSelection(selectionString, 'vmd')`:
+
+| VMD Selection | Description |
+|---------------|-------------|
+| **Basic Properties** |
+| `'name CA'` | Atoms named CA |
+| `'resname ALA'` | Alanine residues |
+| `'chain A'` | Chain A |
+| `'residue 10'` | Residue number 10 |
+| `'element N'` | Nitrogen atoms |
+| `'index 5'` | Atom with index 5 |
+| **Logical Operations** |
+| `'name CA and chain A'` | CA atoms in chain A |
+| `'resname ALA or resname GLY'` | Alanine or glycine residues |
+| `'not water'` | Everything except water |
+| **Spatial Selections** |
+| `'within 5 of name FE'` | Atoms within 5Å of iron atoms |
+| `'exwithin 5 of chain A'` | Exclusive within (not including chain A) |
+| **Property Matching** |
+| `'same resid as name FE'` | Same residue ID as iron atoms |
+| `'same chain as index 100'` | Same chain as atom 100 |
+| **Advanced Properties** |
+| `'numbonds 4'` | Atoms with 4 bonds |
+| `'occupancy > 0.8'` | High occupancy atoms |
+| `'beta > 50'` | High B-factor atoms |
+
+###### **Jmol Syntax Support**
+
+Basic Jmol selection syntax through `compileIdListSelection(selectionString, 'jmol')`:
+
+| Jmol Selection | Description |
+|----------------|-------------|
+| `'_A'` | Chain A |
+| `'10-20'` | Residues 10-20 |
+| `'ALA'` | Alanine residues |
+| `'*.CA'` | All CA atoms |
+| `'carbon'` | All carbon atoms |
+
+##### 3. Usage Examples
+
+```typescript
+import { compileIdListSelection } from 'molstar/lib/mol-script/util/id-list'
+
+// ID List selections with different types
+const authResidues = compileIdListSelection('A 10-50,75 B 100-150', 'auth');
+const labelResidues = compileIdListSelection('A 10-50,75 B 100-150', 'label');
+const atomIds = compileIdListSelection('1-100,150,200-250', 'atom-id');
+const elements = compileIdListSelection('C,N,O', 'element-symbol');
+
+// PyMOL syntax
+const pymolSel = compileIdListSelection('chain A and resi 10-20 and name CA', 'pymol');
+
+// VMD syntax  
+const vmdSel = compileIdListSelection('name CA and within 5 of resname FE', 'vmd');
+
+// Jmol syntax
+const jmolSel = compileIdListSelection('_A and 10-20 and *.CA', 'jmol');
+
+// Apply selections
+plugin.managers.structure.selection.fromCompiledQuery('set', authResidues);
+plugin.managers.structure.selection.fromCompiledQuery('add', pymolSel);
+```
+
+##### 4. Advanced Features
+
+**Insertion Code Handling:**
+- Format: `residue:code` (e.g., `'A 100:A,100:B'`)
+- Ranges: `'A 100:A-100:Z'` (all insertion codes from A to Z)
+
+**Negative Residue Numbers:**
+- Single: `'A -5'`
+- Range: `'A -10--1'` (note double dash for negative ranges)
+- Mixed: `'A -5,1-10,20'`
+
+**Multi-Language Mixing:**
+While each call to `compileIdListSelection` uses one syntax, you can combine selections:
+```typescript
+// Combine different selection types
+const basic = compileIdListSelection('A 10-50', 'auth');
+const pymol = compileIdListSelection('chain B and ss H', 'pymol');
+
+plugin.managers.structure.selection.fromCompiledQuery('set', basic);
+plugin.managers.structure.selection.fromCompiledQuery('add', pymol);
+```
+
+**Error Handling:**
+The parser includes validation and will throw errors for invalid syntax:
+- Invalid residue ranges
+- Malformed insertion codes  
+- Unrecognized properties or operators
+- Syntax errors in complex expressions
+
+This comprehensive selection system makes Mol* compatible with selection syntax from major molecular visualization tools while providing its own powerful native capabilities.
 
 ## Selection Queries
 
