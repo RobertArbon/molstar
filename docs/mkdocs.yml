@@ -37,6 +37,7 @@ nav:
       - API Reference: 'plugin/custom-library/api-reference.md'
       - Examples: 'plugin/custom-library/examples.md'
     - Selections: 'plugin/selections.md'
+    - Representations: 'plugin/representations.md'
     - Viewer State: 'plugin/viewer-state.md'
     - Data State: 'plugin/data-state.md'
     - File Formats: 'plugin/file-formats.md'
