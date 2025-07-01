@@ -68,11 +68,37 @@ Another way to create a selection is via a `SelectionQuery` object. This is a mo
 
 The primary generator is `atomGroups` which supports hierarchical selection tests and various grouping options:
 
-- **entity-test**: Filter entities  
+- **entity-test**: Filter entities (distinct molecular components like protein chains, ligands, water)
 - **chain-test**: Filter chains
 - **residue-test**: Filter residues
 - **atom-test**: Filter individual atoms
 - **group-by**: Property to group atoms into sets
+
+#### What is an Entity?
+
+An **entity** in Mol* represents a distinct molecular component within a macromolecular structure, following the mmCIF standard. Entities are organizational units that group atoms and residues belonging to the same molecular component.
+
+**Entity Types:**
+- `polymer` - Macromolecular chains (proteins, nucleic acids)
+- `non-polymer` - Small molecules, ligands  
+- `water` - Water molecules
+- `branched` - Branched molecules (carbohydrates)
+- `macrolide` - Large ring compounds
+- `unknown` - Type not determined
+
+**Entity Subtypes:**
+- `polypeptide(L)` - L-amino acid protein
+- `polypeptide(D)` - D-amino acid protein
+- `polydeoxyribonucleotide` - DNA
+- `polyribonucleotide` - RNA
+- `polydeoxyribonucleotide/polyribonucleotide hybrid` - DNA/RNA hybrid
+- `cyclic-pseudo-peptide` - Cyclic peptides
+- `peptide nucleic acid` - PNA
+- `oligosaccharide` - Carbohydrates
+- `ion` - Ionic species
+- `lipid` - Lipid molecules
+- `peptide-like` - Peptide-like molecules
+- `other` - Other types
 
 ### Basic Examples
 
@@ -94,6 +120,52 @@ export function select_chains() {
   const query = StructureSelectionQuery('chains_A_B', chainSelection);
   plugin.managers.structure.selection.fromSelectionQuery('set', query);
 }
+```
+
+#### What does `fromSelectionQuery` do?
+
+The `fromSelectionQuery` method applies a `StructureSelectionQuery` to all applicable structures in the current context and updates the visual selection. 
+
+**Purpose:** 
+- Executes the provided query as an asynchronous task
+- Applies the query to all structures in the scene
+- Converts query results to loci (regions of interest)
+- Updates the visual selection with the specified modifier
+
+**Parameters:**
+- `modifier`: Selection operation - `'set'` (replace), `'add'` (union), `'remove'` (subtract), `'intersect'`
+- `query`: The StructureSelectionQuery to execute
+- `applyGranularity`: Whether to apply selection granularity settings (optional, default: true)
+
+#### Selection Granularity Options
+
+The `applyGranularity` parameter controls whether the selection is expanded beyond the exact atoms that match the query. When `true`, selections are expanded according to the current granularity level:
+
+- **`'element'`** - Exact atoms/coarse elements (no expansion)
+- **`'residue'`** - Extends to whole residues containing matched atoms
+- **`'chain'`** - Extends to whole chains containing matched atoms  
+- **`'entity'`** - Extends to whole entities containing matched atoms
+- **`'model'`** - Extends to whole models containing matched atoms
+- **`'operator'`** - Extends to whole symmetry operators containing matched atoms
+- **`'structure'`** - Extends to entire structures containing matched atoms
+- **`'elementInstances'`** - Extends to all symmetry instances of matched atoms
+- **`'residueInstances'`** - Extends to all symmetry instances of whole residues
+- **`'chainInstances'`** - Extends to all symmetry instances of whole chains
+
+**Example:**
+```typescript
+// Select CA atoms - with granularity 'residue', entire residues are selected
+const query = StructureSelectionQuery('CA_atoms', MS.struct.generator.atomGroups({
+  'atom-test': MS.core.rel.eq([MS.struct.atomProperty.macromolecular.label_atom_id(), 'CA'])
+}));
+
+// With applyGranularity = true (default), selection expands to entire residues
+plugin.managers.structure.selection.fromSelectionQuery('set', query, true);
+
+// With applyGranularity = false, selection stays at CA atoms only  
+plugin.managers.structure.selection.fromSelectionQuery('set', query, false);
+
+```typescript
 ```
 
 #### Select Specific Residues
@@ -220,6 +292,13 @@ export function color_chains_differently() {
   
   const ctx = new QueryContext(structure);
   const groupedSelection = chainGrouping(ctx);
+  
+  // Why are lines 290-294 needed?
+  // Line 290: Gets the current molecular structure from the plugin's hierarchy
+  // Line 291: Safety check to prevent errors if no structure is loaded
+  // Line 293: Creates a QueryContext - the execution environment for selection queries
+  // Line 294: Executes the grouping query to get the actual grouped selection results
+  // This pattern is necessary because queries need a structure context to operate on
   
   // 3. Define colors for each chain
   const colors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xff00ff]; // Red, Green, Blue, Yellow, Magenta
@@ -369,13 +448,32 @@ export function demonstrate_grouping_properties() {
   const byElement = MS.struct.atomProperty.core.elementSymbol();  // Group by element (C, N, O, etc.)
   const byModel = MS.struct.atomProperty.core.modelIndex();       // Group by model (multi-model structures)
   
-  // Macromolecular properties
+  // Macromolecular structural properties
   const byResidue = MS.struct.atomProperty.macromolecular.residueKey();     // Group by residue
   const byChain = MS.struct.atomProperty.macromolecular.chainKey();         // Group by chain
   const byEntity = MS.struct.atomProperty.macromolecular.entityKey();       // Group by entity
-  const byCompId = MS.struct.atomProperty.macromolecular.label_comp_id();   // Group by residue name
-  const byAuthChain = MS.struct.atomProperty.macromolecular.auth_asym_id(); // Group by author chain ID
   const bySecStruct = MS.struct.atomProperty.macromolecular.secondaryStructureKey(); // Group by secondary structure
+  const byConnectedComponent = MS.struct.atomProperty.macromolecular.connectedComponentKey(); // Group by connected components
+  const byOperator = MS.struct.atomProperty.core.operatorKey();             // Group by symmetry operators
+  
+  // Chemical properties
+  const byCompId = MS.struct.atomProperty.macromolecular.label_comp_id();   // Group by component identifier
+  const byAuthCompId = MS.struct.atomProperty.macromolecular.auth_comp_id(); // Group by author component ID
+  const byEntityType = MS.struct.atomProperty.macromolecular.entityType();  // Group by entity type
+  const byEntitySubtype = MS.struct.atomProperty.macromolecular.entitySubtype(); // Group by entity subtype
+  const byChemCompType = MS.struct.atomProperty.macromolecular.chemCompType(); // Group by chemical component type
+  
+  // Coordinate properties
+  const byAuthChain = MS.struct.atomProperty.macromolecular.auth_asym_id(); // Group by author chain ID
+  const byLabelChain = MS.struct.atomProperty.macromolecular.label_asym_id(); // Group by label chain ID  
+  const byAuthSeq = MS.struct.atomProperty.macromolecular.auth_seq_id();    // Group by author sequence number
+  const byLabelSeq = MS.struct.atomProperty.macromolecular.label_seq_id();  // Group by label sequence number
+  
+  // Special properties
+  const byIsHet = MS.struct.atomProperty.macromolecular.isHet();            // Group by HETATM vs ATOM
+  const byIsModified = MS.struct.atomProperty.macromolecular.isModified();  // Group by modified residues
+  const byIsNonStandard = MS.struct.atomProperty.macromolecular.isNonStandard(); // Group by non-standard residues
+  const byObjectPrimitive = MS.struct.atomProperty.core.objectPrimitive();  // Group by representation type
   
   // Example: Group carbons by residue
   const carbonsByResidue = MS.struct.generator.atomGroups({
@@ -388,9 +486,316 @@ export function demonstrate_grouping_properties() {
 }
 ```
 
-Complex queries can be constructed by combining primitive queries at the level of [`chain-test`, `residue-test`, `entity-test`, etc] (https://github.com/molstar/molstar/blob/6edbae80db340134341631f669eec86543a0f1a8/src/mol-script/language/symbol-table/structure-query.ts#L88C4-L94C112) by combining them via logical connectives provided in the `MolscriptBuilder.core.rel` as above.
+Complex queries can be constructed by combining primitive queries at the level of [`chain-test`, `residue-test`, `entity-test`, etc] by combining them via logical connectives provided in the `MolscriptBuilder.core.rel` as above.
 
-Inspect these examples to get a better feeling for this syntax: `https://github.com/molstar/molstar/blob/6edbae80db340134341631f669eec86543a0f1a8/src/mol-plugin-state/helpers/structure-selection-query.ts#L88-L580`
+### atomGroups Generator Definition
+
+The `atomGroups` generator is defined in `/mol-script/language/symbol-table/structure-query.ts` as:
+
+```typescript
+atomGroups: symbol(Arguments.Dictionary({
+    'entity-test': Argument(Type.Bool, { 
+        isOptional: true, 
+        defaultValue: true, 
+        description: 'Test for the 1st atom of every entity' 
+    }),
+    'chain-test': Argument(Type.Bool, { 
+        isOptional: true, 
+        defaultValue: true, 
+        description: 'Test for the 1st atom of every chain' 
+    }),
+    'residue-test': Argument(Type.Bool, { 
+        isOptional: true, 
+        defaultValue: true, 
+        description: 'Test for the 1st atom every residue' 
+    }),
+    'atom-test': Argument(Type.Bool, { 
+        isOptional: true, 
+        defaultValue: true 
+    }),
+    'group-by': Argument(Type.Any, { 
+        isOptional: true, 
+        defaultValue: `atom-key`, 
+        description: 'Group atoms to sets based on this property. Default: each atom has its own set' 
+    }),
+}), Types.ElementSelectionQuery, 'Return all atoms for which the tests are satisfied, grouped into sets.')
+```
+
+This defines the hierarchical filtering system where each test operates on the first atom of its respective level (entity, chain, residue) to determine inclusion, with customizable grouping strategies.
+
+### Built-in Selection Query Examples
+
+From `/mol-plugin-state/helpers/structure-selection-query.ts`, here are some practical built-in queries:
+
+#### Polymer Selection
+```typescript
+const polymer = StructureSelectionQuery('Polymer', MS.struct.modifier.union([
+    MS.struct.generator.atomGroups({
+        'entity-test': MS.core.logic.and([
+            MS.core.rel.eq([MS.ammp('entityType'), 'polymer']),
+            MS.core.str.match([
+                MS.re('(polypeptide|cyclic-pseudo-peptide|peptide-like|nucleotide|peptide nucleic acid)', 'i'),
+                MS.ammp('entitySubtype')
+            ])
+        ])
+    })
+]), { category: StructureSelectionCategory.Type });
+```
+
+#### Protein Entity Test
+```typescript
+const _proteinEntityTest = MS.core.logic.and([
+    MS.core.rel.eq([MS.ammp('entityType'), 'polymer']),
+    MS.core.str.match([
+        MS.re('(polypeptide|cyclic-pseudo-peptide|peptide-like)', 'i'),
+        MS.ammp('entitySubtype')
+    ])
+]);
+
+const protein = StructureSelectionQuery('Protein', MS.struct.generator.atomGroups({
+    'entity-test': _proteinEntityTest
+}), { category: StructureSelectionCategory.Type });
+```
+
+#### Ligand Selection
+```typescript
+const ligand = StructureSelectionQuery('Ligand', MS.struct.modifier.union([
+    MS.struct.generator.atomGroups({
+        'entity-test': MS.core.logic.and([
+            MS.core.rel.eq([MS.ammp('entityType'), 'non-polymer']),
+            MS.core.logic.not([
+                MS.core.set.has([
+                    MS.set(...SetUtils.toArray(WaterNames)), 
+                    MS.ammp('auth_comp_id')
+                ])
+            ])
+        ])
+    })
+]), { category: StructureSelectionCategory.Type });
+```
+
+#### Nucleic Acid Selection
+```typescript
+const nucleic = StructureSelectionQuery('Nucleic', MS.struct.generator.atomGroups({
+    'entity-test': MS.core.logic.and([
+        MS.core.rel.eq([MS.ammp('entityType'), 'polymer']),
+        MS.core.str.match([
+            MS.re('(nucleotide)', 'i'),
+            MS.ammp('entitySubtype')
+        ])
+    ])
+}), { category: StructureSelectionCategory.Type });
+```
+
+#### Water Selection
+```typescript
+const water = StructureSelectionQuery('Water', MS.struct.generator.atomGroups({
+    'entity-test': MS.core.rel.eq([MS.ammp('entityType'), 'water'])
+}), { category: StructureSelectionCategory.Type });
+```
+
+#### Ion Selection
+```typescript
+const ion = StructureSelectionQuery('Ion', MS.struct.generator.atomGroups({
+    'entity-test': MS.core.logic.and([
+        MS.core.rel.eq([MS.ammp('entityType'), 'non-polymer']),
+        MS.core.rel.eq([MS.ammp('entitySubtype'), 'ion'])
+    ])
+}), { category: StructureSelectionCategory.Type });
+```
+
+#### Secondary Structure Selections
+```typescript
+const helix = StructureSelectionQuery('Helix', MS.struct.generator.atomGroups({
+    'entity-test': _proteinEntityTest,
+    'residue-test': MS.core.flags.hasAny([
+        MS.ammp('secondaryStructureFlags'),
+        MS.core.type.bitflags([SecondaryStructureType.Flag.Helix])
+    ])
+}), { category: StructureSelectionCategory.Type });
+
+const beta = StructureSelectionQuery('Beta Strand', MS.struct.generator.atomGroups({
+    'entity-test': _proteinEntityTest,
+    'residue-test': MS.core.flags.hasAny([
+        MS.ammp('secondaryStructureFlags'),
+        MS.core.type.bitflags([SecondaryStructureType.Flag.Beta])
+    ])
+}), { category: StructureSelectionCategory.Type });
+```
+
+These examples demonstrate the power and flexibility of the selection system, showing how complex biological concepts (proteins, ligands, secondary structures) are encoded as logical combinations of entity, chain, residue, and atom tests.
+
+## MS.core Operators Reference
+
+The following operators and methods are available in the `MS.core` namespace for building complex selection queries:
+
+### MolScript Builder Shorthand Functions
+
+The MolScript Builder provides several shorthand functions to make selection queries more concise and readable:
+
+| Function | Full Name | Purpose | Example | Equivalent Full Path |
+|----------|-----------|---------|---------|---------------------|
+| **Core Atom Properties** |
+| `MS.acp('elementSymbol')` | Atom Core Property | Chemical element symbol | `MS.acp('elementSymbol')` | `MS.struct.atomProperty.core.elementSymbol()` |
+| `MS.acp('atomKey')` | Atom Core Property | Unique atom identifier | `MS.acp('atomKey')` | `MS.struct.atomProperty.core.atomKey()` |
+| `MS.acp('x')` | Atom Core Property | X coordinate | `MS.acp('x')` | `MS.struct.atomProperty.core.x()` |
+| `MS.acp('y')` | Atom Core Property | Y coordinate | `MS.acp('y')` | `MS.struct.atomProperty.core.y()` |
+| `MS.acp('z')` | Atom Core Property | Z coordinate | `MS.acp('z')` | `MS.struct.atomProperty.core.z()` |
+| `MS.acp('vdw')` | Atom Core Property | Van der Waals radius | `MS.acp('vdw')` | `MS.struct.atomProperty.core.vdw()` |
+| `MS.acp('mass')` | Atom Core Property | Atomic mass | `MS.acp('mass')` | `MS.struct.atomProperty.core.mass()` |
+| `MS.acp('atomicNumber')` | Atom Core Property | Atomic number | `MS.acp('atomicNumber')` | `MS.struct.atomProperty.core.atomicNumber()` |
+| `MS.acp('bondCount')` | Atom Core Property | Number of bonds | `MS.acp('bondCount')` | `MS.struct.atomProperty.core.bondCount()` |
+| `MS.acp('modelIndex')` | Atom Core Property | Model number | `MS.acp('modelIndex')` | `MS.struct.atomProperty.core.modelIndex()` |
+| `MS.acp('operatorKey')` | Atom Core Property | Symmetry operator key | `MS.acp('operatorKey')` | `MS.struct.atomProperty.core.operatorKey()` |
+| **Macromolecular Properties** |
+| `MS.ammp('residueKey')` | Atom Macromolecular Property | Unique residue identifier | `MS.ammp('residueKey')` | `MS.struct.atomProperty.macromolecular.residueKey()` |
+| `MS.ammp('chainKey')` | Atom Macromolecular Property | Unique chain identifier | `MS.ammp('chainKey')` | `MS.struct.atomProperty.macromolecular.chainKey()` |
+| `MS.ammp('entityKey')` | Atom Macromolecular Property | Unique entity identifier | `MS.ammp('entityKey')` | `MS.struct.atomProperty.macromolecular.entityKey()` |
+| `MS.ammp('label_atom_id')` | Atom Macromolecular Property | Atom name (PDB standard) | `MS.ammp('label_atom_id')` | `MS.struct.atomProperty.macromolecular.label_atom_id()` |
+| `MS.ammp('auth_atom_id')` | Atom Macromolecular Property | Author atom name | `MS.ammp('auth_atom_id')` | `MS.struct.atomProperty.macromolecular.auth_atom_id()` |
+| `MS.ammp('label_comp_id')` | Atom Macromolecular Property | Component/residue name | `MS.ammp('label_comp_id')` | `MS.struct.atomProperty.macromolecular.label_comp_id()` |
+| `MS.ammp('auth_comp_id')` | Atom Macromolecular Property | Author component name | `MS.ammp('auth_comp_id')` | `MS.struct.atomProperty.macromolecular.auth_comp_id()` |
+| `MS.ammp('label_asym_id')` | Atom Macromolecular Property | Asymmetric unit ID | `MS.ammp('label_asym_id')` | `MS.struct.atomProperty.macromolecular.label_asym_id()` |
+| `MS.ammp('auth_asym_id')` | Atom Macromolecular Property | Author chain ID | `MS.ammp('auth_asym_id')` | `MS.struct.atomProperty.macromolecular.auth_asym_id()` |
+| `MS.ammp('label_seq_id')` | Atom Macromolecular Property | Sequence number | `MS.ammp('label_seq_id')` | `MS.struct.atomProperty.macromolecular.label_seq_id()` |
+| `MS.ammp('auth_seq_id')` | Atom Macromolecular Property | Author sequence number | `MS.ammp('auth_seq_id')` | `MS.struct.atomProperty.macromolecular.auth_seq_id()` |
+| `MS.ammp('entityType')` | Atom Macromolecular Property | Entity type (polymer, etc.) | `MS.ammp('entityType')` | `MS.struct.atomProperty.macromolecular.entityType()` |
+| `MS.ammp('entitySubtype')` | Atom Macromolecular Property | Entity subtype | `MS.ammp('entitySubtype')` | `MS.struct.atomProperty.macromolecular.entitySubtype()` |
+| `MS.ammp('occupancy')` | Atom Macromolecular Property | Occupancy factor | `MS.ammp('occupancy')` | `MS.struct.atomProperty.macromolecular.occupancy()` |
+| `MS.ammp('B_iso_or_equiv')` | Atom Macromolecular Property | B-factor (temperature factor) | `MS.ammp('B_iso_or_equiv')` | `MS.struct.atomProperty.macromolecular.B_iso_or_equiv()` |
+| `MS.ammp('secondaryStructureKey')` | Atom Macromolecular Property | Secondary structure identifier | `MS.ammp('secondaryStructureKey')` | `MS.struct.atomProperty.macromolecular.secondaryStructureKey()` |
+| `MS.ammp('secondaryStructureFlags')` | Atom Macromolecular Property | Secondary structure flags | `MS.ammp('secondaryStructureFlags')` | `MS.struct.atomProperty.macromolecular.secondaryStructureFlags()` |
+| `MS.ammp('isHet')` | Atom Macromolecular Property | HETATM vs ATOM record | `MS.ammp('isHet')` | `MS.struct.atomProperty.macromolecular.isHet()` |
+| `MS.ammp('isModified')` | Atom Macromolecular Property | Modified residue flag | `MS.ammp('isModified')` | `MS.struct.atomProperty.macromolecular.isModified()` |
+| `MS.ammp('isNonStandard')` | Atom Macromolecular Property | Non-standard residue flag | `MS.ammp('isNonStandard')` | `MS.struct.atomProperty.macromolecular.isNonStandard()` |
+| `MS.ammp('chemCompType')` | Atom Macromolecular Property | Chemical component type | `MS.ammp('chemCompType')` | `MS.struct.atomProperty.macromolecular.chemCompType()` |
+| **Topology Properties** |
+| `MS.atp('connectedComponentKey')` | Atom Topology Property | Connected component ID | `MS.atp('connectedComponentKey')` | `MS.struct.atomProperty.topology.connectedComponentKey()` |
+| **Utility Functions** |
+| `MS.atomName('CA')` | Atom Name Constructor | Create atom name expression | `MS.atomName('CA')` | Direct constructor for atom names |
+| `MS.es('C')` | Element Symbol Constructor | Create element symbol expression | `MS.es('C')` | Direct constructor for element symbols |
+| `MS.list(...)` | List Constructor | Create list expression | `MS.list(item1, item2)` | Direct constructor for lists |
+| `MS.set(...)` | Set Constructor | Create set expression | `MS.set('ARG', 'LYS')` | Direct constructor for sets |
+| `MS.re('pattern')` | RegEx Constructor | Create regex expression | `MS.re('polypeptide', 'i')` | Direct constructor for regex patterns |
+| `MS.fn(expr)` | Function Constructor | Create function expression | `MS.fn(expression)` | Direct constructor for functions |
+
+These shorthand functions make selection queries much more readable and concise, avoiding the need to write the full nested property paths repeatedly.
+
+### MS.core.rel (Relational Operators)
+
+| Operator | Description | Example | Selects |
+|----------|-------------|---------|---------|
+| `MS.core.rel.eq([a, b])` | Equals | `MS.core.rel.eq([MS.ammp('auth_asym_id'), 'A'])` | Atoms in chain A |
+| `MS.core.rel.neq([a, b])` | Not equals | `MS.core.rel.neq([MS.ammp('entityType'), 'water'])` | All non-water atoms |
+| `MS.core.rel.lt([a, b])` | Less than | `MS.core.rel.lt([MS.ammp('label_seq_id'), 50])` | Residues with sequence number < 50 |
+| `MS.core.rel.lte([a, b])` | Less than or equal | `MS.core.rel.lte([MS.ammp('B_iso_or_equiv'), 30])` | Atoms with B-factor ≤ 30 |
+| `MS.core.rel.gr([a, b])` | Greater than | `MS.core.rel.gr([MS.ammp('label_seq_id'), 10])` | Residues with sequence number > 10 |
+| `MS.core.rel.gre([a, b])` | Greater than or equal | `MS.core.rel.gre([MS.ammp('occupancy'), 0.5])` | Atoms with occupancy ≥ 0.5 |
+| `MS.core.rel.inRange([value, min, max])` | In range (min ≤ value ≤ max) | `MS.core.rel.inRange([MS.ammp('label_seq_id'), 10, 50])` | Residues 10-50 |
+
+### MS.core.logic (Logical Operators)
+
+| Operator | Description | Example | Selects |
+|----------|-------------|---------|---------|
+| `MS.core.logic.not([condition])` | Logical NOT | `MS.core.logic.not([MS.core.rel.eq([MS.ammp('entityType'), 'water'])])` | Everything except water |
+| `MS.core.logic.and([cond1, cond2, ...])` | Logical AND | `MS.core.logic.and([chainTest, residueTest])` | Items matching all conditions |
+| `MS.core.logic.or([cond1, cond2, ...])` | Logical OR | `MS.core.logic.or([helixTest, sheetTest])` | Items in helices or sheets |
+
+### MS.core.set (Set Operations)
+
+| Operator | Description | Example | Selects |
+|----------|-------------|---------|---------|
+| `MS.core.set.has([set, value])` | Check if set contains value | `MS.core.set.has([MS.set(['ARG', 'LYS', 'HIS']), MS.ammp('label_comp_id')])` | Basic amino acid residues |
+| `MS.core.set.isSubset([set1, set2])` | Check if set1 ⊆ set2 | `MS.core.set.isSubset([selection1, selection2])` | Items where first selection is subset of second |
+
+### MS.core.str (String Operations)
+
+| Operator | Description | Example | Selects |
+|----------|-------------|---------|---------|
+| `MS.core.str.concat([str1, str2, ...])` | Concatenate strings | `MS.core.str.concat([MS.ammp('auth_asym_id'), '_', MS.ammp('label_seq_id')])` | Creates combined chain_residue identifiers |
+| `MS.core.str.match([regex, string])` | Test regex match | `MS.core.str.match([MS.re('polypeptide', 'i'), MS.ammp('entitySubtype')])` | Protein entities (polypeptide subtypes) |
+
+### MS.core.type (Type Operations)
+
+| Operator | Description | Example | Selects |
+|----------|-------------|---------|---------|
+| `MS.core.type.bool([value])` | Convert to boolean | `MS.core.type.bool([condition])` | Converts value to true/false for logic |
+| `MS.core.type.num([value])` | Convert to number | `MS.core.type.num([stringValue])` | Converts strings to numbers for math |
+| `MS.core.type.str([value])` | Convert to string | `MS.core.type.str([numericValue])` | Converts numbers to strings for text ops |
+| `MS.core.type.regex([pattern, flags])` | Create regex | `MS.core.type.regex(['polypeptide', 'i'])` | Creates pattern for protein matching |
+| `MS.core.type.list([items...])` | Create list | `MS.core.type.list([item1, item2, item3])` | Creates ordered collection of items |
+| `MS.core.type.set([items...])` | Create set | `MS.core.type.set(['ARG', 'LYS', 'HIS'])` | Creates set for membership testing |
+| `MS.core.type.bitflags([number])` | Interpret as bitflags | `MS.core.type.bitflags([SecondaryStructureType.Flag.Helix])` | Creates flags for helix detection |
+
+### MS.core.flags (Flag Operations)
+
+| Operator | Description | Example | Selects |
+|----------|-------------|---------|---------|
+| `MS.core.flags.hasAny([flags1, flags2])` | Check if any flags match | `MS.core.flags.hasAny([MS.ammp('secondaryStructureFlags'), helixFlags])` | Residues with any helix flags |
+| `MS.core.flags.hasAll([flags1, flags2])` | Check if all flags match | `MS.core.flags.hasAll([MS.ammp('secondaryStructureFlags'), combinedFlags])` | Residues with all specified flags |
+
+### MS.core.math (Mathematical Operations)
+
+| Category | Operator | Description | Example | Used For |
+|----------|----------|-------------|---------|----------|
+| **Arithmetic** | `MS.core.math.add([nums...])` | Addition | `MS.core.math.add([MS.ammp('x'), offset])` | Coordinate calculations |
+| | `MS.core.math.sub([nums...])` | Subtraction | `MS.core.math.sub([maxVal, MS.ammp('B_iso_or_equiv')])` | B-factor threshold calculations |
+| | `MS.core.math.mult([nums...])` | Multiplication | `MS.core.math.mult([MS.ammp('occupancy'), 100])` | Converting occupancy to percentage |
+| | `MS.core.math.div([a, b])` | Division | `MS.core.math.div([MS.ammp('B_iso_or_equiv'), 2])` | Normalizing B-factors |
+| | `MS.core.math.pow([base, exp])` | Power | `MS.core.math.pow([MS.ammp('distance'), 2])` | Distance squared calculations |
+| | `MS.core.math.mod([a, b])` | Modulo | `MS.core.math.mod([MS.ammp('label_seq_id'), 10])` | Every 10th residue selection |
+| **Min/Max** | `MS.core.math.min([nums...])` | Minimum | `MS.core.math.min([MS.ammp('B_iso_or_equiv'), threshold])` | Capping B-factor values |
+| | `MS.core.math.max([nums...])` | Maximum | `MS.core.math.max([MS.ammp('occupancy'), minOcc])` | Ensuring minimum occupancy |
+| **Functions** | `MS.core.math.floor([n])` | Floor function | `MS.core.math.floor([MS.ammp('B_iso_or_equiv')])` | Rounding B-factors down |
+| | `MS.core.math.ceil([n])` | Ceiling function | `MS.core.math.ceil([MS.ammp('distance')])` | Rounding distances up |
+| | `MS.core.math.abs([n])` | Absolute value | `MS.core.math.abs([MS.ammp('charge')])` | Getting magnitude of charge |
+| | `MS.core.math.sqrt([n])` | Square root | `MS.core.math.sqrt([MS.ammp('distanceSquared')])` | Converting distance squared to distance |
+
+### MS.core.list (List Operations)
+
+| Operator | Description | Example | Used For |
+|----------|-------------|---------|----------|
+| `MS.core.list.getAt([list, index])` | Get element at index | `MS.core.list.getAt([chainList, 0])` | Accessing first chain in list |
+| `MS.core.list.equal([list1, list2])` | Check list equality | `MS.core.list.equal([selection1, selection2])` | Comparing selection lists |
+
+### MS.core.ctrl (Control Flow)
+
+| Operator | Description | Example | Used For |
+|----------|-------------|---------|----------|
+| `MS.core.ctrl.if([condition, ifTrue, ifFalse])` | Conditional expression | `MS.core.ctrl.if([isProtein, proteinColor, ligandColor])` | Conditional property assignment |
+| `MS.core.ctrl.eval([function])` | Evaluate function | `MS.core.ctrl.eval([complexCalculation])` | Lazy evaluation of expressions |
+
+### Complex Example Using Multiple Operators
+
+```typescript
+// Select basic amino acids (ARG, LYS, HIS) in helical regions with high B-factors
+const complexQuery = MS.struct.generator.atomGroups({
+  'entity-test': MS.core.logic.and([
+    MS.core.rel.eq([MS.ammp('entityType'), 'polymer']),
+    MS.core.str.match([
+      MS.core.type.regex(['polypeptide', 'i']), 
+      MS.ammp('entitySubtype')
+    ])
+  ]),
+  'residue-test': MS.core.logic.and([
+    MS.core.set.has([
+      MS.core.type.set(['ARG', 'LYS', 'HIS']),
+      MS.ammp('label_comp_id')
+    ]),
+    MS.core.flags.hasAny([
+      MS.ammp('secondaryStructureFlags'),
+      MS.core.type.bitflags([SecondaryStructureType.Flag.Helix])
+    ])
+  ]),
+  'atom-test': MS.core.rel.gr([
+    MS.ammp('B_iso_or_equiv'),
+    MS.core.math.mult([2, 25])  // B-factor > 50
+  ]),
+  'group-by': MS.ammp('residueKey')
+});
+```
+
+This comprehensive operator reference enables building sophisticated molecular selection queries that combine structural, chemical, mathematical, and logical criteria.
 
 
 Furthermore, a query made this way can be converted to a `Loci` object which is important in many parts of the libary:
