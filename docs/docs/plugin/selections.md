@@ -132,6 +132,21 @@ export function select_atoms() {
 
 ### Grouping Examples
 
+When you create grouped selections, you can iterate through each group and apply different operations to them - such as different colors, representations, or highlighting. Unlike basic selections that return all atoms as a single unit, grouped selections return multiple structures that you can process independently.
+
+**What you can do with grouped selections:**
+- Apply different colors to each group (e.g., color each chain differently)
+- Use different representations for each group (e.g., cartoon for helices, surface for loops)
+- Apply different themes or visual properties to each structural unit
+- Process each group separately for analysis or highlighting
+- Focus or highlight individual groups independently
+
+**Basic workflow:**
+1. Create a grouped selection using `group-by`
+2. Iterate through each group using `StructureSelection.forEach`
+3. Convert each group to `Loci` using `StructureSelection.toLociWithCurrentUnits`
+4. Apply visual operations (coloring, representation, etc.) to each group's Loci
+
 #### Group by Chain
 
 ```typescript
@@ -185,6 +200,47 @@ export function select_by_secondary_structure() {
   
   const query = StructureSelectionQuery('grouped_by_ss', ssGrouping);
   plugin.managers.structure.selection.fromSelectionQuery('set', query);
+}
+```
+
+#### Processing Grouped Selections - Practical Example
+
+```typescript
+import { StructureSelection, QueryContext } from 'molstar/lib/mol-model/structure';
+
+export function color_chains_differently() {
+  // 1. Create grouped selection by chain
+  const chainGrouping = MS.struct.generator.atomGroups({
+    'group-by': MS.struct.atomProperty.macromolecular.chainKey()
+  });
+  
+  // 2. Execute the query to get grouped selection
+  const structure = plugin.managers.structure.hierarchy.current.structures[0]?.cell.obj?.data;
+  if (!structure) return;
+  
+  const ctx = new QueryContext(structure);
+  const groupedSelection = chainGrouping(ctx);
+  
+  // 3. Define colors for each chain
+  const colors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xff00ff]; // Red, Green, Blue, Yellow, Magenta
+  
+  // 4. Iterate through each group (chain) and apply different colors
+  let groupIndex = 0;
+  StructureSelection.forEach(groupedSelection, (chainStructure, index) => {
+    // Convert this group to Loci
+    const chainLoci = StructureSelection.toLociWithCurrentUnits(
+      StructureSelection.Singletons(structure, chainStructure)
+    );
+    
+    // Apply different color to this chain
+    const color = colors[groupIndex % colors.length];
+    plugin.managers.interactivity.lociHighlights.highlightOnly({ loci: chainLoci });
+    
+    // You could also apply different representations, themes, etc. here
+    // plugin.managers.structure.component.setColor(chainLoci, color);
+    
+    groupIndex++;
+  });
 }
 ```
 
